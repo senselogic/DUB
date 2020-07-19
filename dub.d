@@ -431,14 +431,6 @@ class SNAPSHOT_FILE
 
     // -- INQUIRIES
 
-    string GetFolderPath(
-        )
-    {
-        return Folder.Path;
-    }
-
-    // ~~
-
     string GetFilePath(
         )
     {
@@ -603,7 +595,7 @@ class SNAPSHOT
         SNAPSHOT_FILE snapshot_file
         )
     {
-        return GetFile( snapshot_file.GetFolderPath(), snapshot_file.Name ) !is null;
+        return GetFile( snapshot_file.Folder.Path, snapshot_file.Name ) !is null;
     }
 
     // ~~
@@ -613,15 +605,15 @@ class SNAPSHOT
         )
     {
         SNAPSHOT_FILE
-            old_snapshot_file;
+            found_snapshot_file;
 
-        old_snapshot_file = GetFile( snapshot_file.GetFolderPath(), snapshot_file.Name );
+        found_snapshot_file = GetFile( snapshot_file.Folder.Path, snapshot_file.Name );
 
-        if ( old_snapshot_file !is null
-             && old_snapshot_file.ByteCount == snapshot_file.ByteCount
-             && old_snapshot_file.ModificationTime == snapshot_file.ModificationTime )
+        if ( found_snapshot_file !is null
+             && found_snapshot_file.ByteCount == snapshot_file.ByteCount
+             && found_snapshot_file.ModificationTime == snapshot_file.ModificationTime )
         {
-            return old_snapshot_file;
+            return found_snapshot_file;
         }
         else
         {
@@ -840,7 +832,6 @@ class SNAPSHOT
         foreach ( snapshot_folder; FolderArray )
         {
             snapshot_folder.Write( stream );
-writeln( "Write folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
         }
 
         stream.WriteSection( "FILE" );
@@ -983,8 +974,8 @@ writeln( "Write folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
                     snapshot_folder.Path = FolderArray[ snapshot_folder.SuperFolderIndex ].Path ~ snapshot_folder.Name ~ "/";
                 }
 
-writeln( "Read folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
                 FolderArray ~= snapshot_folder;
+                FolderMap[ snapshot_folder.Path ] = snapshot_folder;
             }
         }
 
@@ -998,6 +989,7 @@ writeln( "Read folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
             {
                 snapshot_file = new SNAPSHOT_FILE();
                 snapshot_file.Read( stream );
+
                 snapshot_file.Folder = FolderArray[ snapshot_file.FolderIndex ];
                 snapshot_file.Folder.FileArray ~= snapshot_file;
                 snapshot_file.Folder.FileMap[ snapshot_file.Name ] = snapshot_file;
