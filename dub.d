@@ -531,7 +531,7 @@ class SNAPSHOT
     string GetFileName(
         )
     {
-        return Time.toISOString().replace( "T", "" ).replace( ".", "" ) ~ ".dbs";
+        return ( Time.toISOString().replace( "T", "" ).replace( ".", "" ) ~ "0000000" )[ 0 .. 21 ] ~ ".dbs";
     }
 
     // ~~

@@ -100,8 +100,8 @@ List the snapshots of the default archive of this repository.
 
 ## Limitations
 
-* Files are stored uncompressed and unencrypted, on purpose.
 * Only local repositories are handled.
+* Files are stored uncompressed and unencrypted, to allow external access.
 * Symbolic links are not processed.
 
 ## Version
