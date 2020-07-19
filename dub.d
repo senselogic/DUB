@@ -662,7 +662,7 @@ class SNAPSHOT
 
             snapshot_folder = new SNAPSHOT_FOLDER();
             snapshot_folder.SuperFolderIndex = super_folder_index;
-            snapshot_folder.Name = relative_folder_path.GetFileName();
+            snapshot_folder.Name = relative_folder_path.GetFolderName();
             snapshot_folder.AccessTime = folder_access_time;
             snapshot_folder.ModificationTime = folder_modification_time;
             snapshot_folder.AttributeMask = folder_attribute_mask;
@@ -837,17 +837,18 @@ class SNAPSHOT
         stream.WriteSection( "FOLD" );
         stream.WriteNatural32( cast( uint )FolderArray.length );
 
-        foreach ( folder; FolderArray )
+        foreach ( snapshot_folder; FolderArray )
         {
-            folder.Write( stream );
+            snapshot_folder.Write( stream );
+writeln( "Write folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
         }
 
         stream.WriteSection( "FILE" );
         stream.WriteNatural32( cast( uint )FileArray.length );
 
-        foreach ( file; FileArray )
+        foreach ( snapshot_file; FileArray )
         {
-            file.Write( stream );
+            snapshot_file.Write( stream );
         }
 
         stream.WriteSection();
@@ -973,13 +974,16 @@ class SNAPSHOT
                 snapshot_folder = new SNAPSHOT_FOLDER();
                 snapshot_folder.Read( stream );
 
-                if ( snapshot_folder.SuperFolderIndex != NoFolderIndex )
+                if ( snapshot_folder.SuperFolderIndex == NoFolderIndex )
                 {
-                    snapshot_folder.Path = FolderArray[ snapshot_folder.SuperFolderIndex ].Path;
+                    snapshot_folder.Path = "";
+                }
+                else
+                {
+                    snapshot_folder.Path = FolderArray[ snapshot_folder.SuperFolderIndex ].Path ~ snapshot_folder.Name ~ "/";
                 }
 
-                snapshot_folder.Path ~= snapshot_folder.Name ~ "/";
-
+writeln( "Read folder ", snapshot_folder.Name, " | ", snapshot_folder.Path );
                 FolderArray ~= snapshot_folder;
             }
         }
@@ -1386,7 +1390,7 @@ class STORE
         string
             data_folder_path;
 
-        data_folder_path = DataFolderPath ~ data_snapshot_folder.Name;
+        data_folder_path = DataFolderPath ~ data_snapshot_folder.Path;
 
         if ( data_folder_path.IsEmptyFolder() )
         {
@@ -1403,7 +1407,7 @@ class STORE
         string
             data_file_path;
 
-        data_file_path = DataFolderPath ~ data_snapshot_file.Name;
+        data_file_path = DataFolderPath ~ data_snapshot_file.Folder.Path ~ data_snapshot_file.Name;
         data_file_path.RemoveFile();
     }
 
@@ -1873,6 +1877,20 @@ string GetFileName(
     {
         return file_path;
     }
+}
+
+// ~~
+
+string GetFolderName(
+    string folder_path
+    )
+{
+    if ( folder_path.endsWith( '/' ) )
+    {
+        folder_path = folder_path[ 0 .. $ - 1 ];
+    }
+
+    return folder_path.GetFileName();
 }
 
 // ~~
