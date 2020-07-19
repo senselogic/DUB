@@ -43,7 +43,7 @@ dub [options]
 --include FOLDER/ : include this folder
 --ignore file_filter : ignore matching files
 --keep file_filter : keep matching files
---select file_filter : exclusively select matching files
+--select file_filter : select only matching files
 --abort : abort on errors
 --verbose : show the processing messages
 ```
