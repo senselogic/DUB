@@ -229,8 +229,8 @@ class STREAM
         uint
             bit_count;
         ulong
-            natural,
-            byte_;
+            byte_,
+            natural;
 
         natural = 0;
         bit_count = 0;
@@ -326,7 +326,6 @@ class STREAM
         if ( HasTag( tag ) )
         {
             ByteIndex += 4;
-
             section_byte_count = ReadNatural64();
 
             return true;
