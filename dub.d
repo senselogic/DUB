@@ -63,8 +63,9 @@ class STREAM
     ubyte[]
         ByteArray;
     ulong
-        ByteIndex,
-        SectionByteIndex;
+        ByteIndex;
+    ubyte[]
+        SectionByteArray;
 
     // -- INQUIRIES
 
@@ -80,7 +81,7 @@ class STREAM
         ubyte byte_
         )
     {
-        ByteArray ~= byte_;
+        SectionByteArray ~= byte_;
     }
 
     // ~~
@@ -89,29 +90,7 @@ class STREAM
         bool boolean
         )
     {
-        ByteArray ~= boolean ? 1 : 0;
-    }
-
-    // ~~
-
-    void WriteNatural16(
-        ushort natural
-        )
-    {
-        WriteByte( cast( ubyte )( natural & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 8 ) & 255 ) );
-    }
-
-    // ~~
-
-    void WriteNatural32(
-        uint natural
-        )
-    {
-        WriteByte( cast( ubyte )( natural & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 8 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 16 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 24 ) & 255 ) );
+        SectionByteArray ~= boolean ? 1 : 0;
     }
 
     // ~~
@@ -120,14 +99,32 @@ class STREAM
         ulong natural
         )
     {
-        WriteByte( cast( ubyte )( natural & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 8 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 16 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 24 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 32 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 40 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 48 ) & 255 ) );
-        WriteByte( cast( ubyte )( ( natural >> 56 ) & 255 ) );
+        while ( natural > 127 )
+        {
+            SectionByteArray ~= cast( ubyte )( 128 | ( natural & 127 ) );
+
+            natural >>= 7;
+        }
+
+        SectionByteArray ~= cast( ubyte )( natural & 127 );
+    }
+
+    // ~~
+
+    void WriteNatural32(
+        uint natural
+        )
+    {
+        WriteNatural64( natural );
+    }
+
+    // ~~
+
+    void WriteNatural16(
+        ushort natural
+        )
+    {
+        WriteNatural64( natural );
     }
 
     // ~~
@@ -140,8 +137,9 @@ class STREAM
             time;
 
         time.SystemTime = system_time;
+        SectionByteArray ~= time.ByteArray;
 
-        ByteArray ~= time.ByteArray;
+        assert( time.ByteArray.sizeof == time.SystemTime.sizeof );
     }
 
     // ~~
@@ -150,8 +148,8 @@ class STREAM
         string text
         )
     {
-        WriteNatural16( cast( ushort )text.length );
-        ByteArray ~= cast( ubyte[] )text[ 0 .. $ ];
+        WriteNatural64( text.length );
+        SectionByteArray ~= cast( ubyte[] )text[ 0 .. $ ];
     }
 
     // ~~
@@ -160,23 +158,7 @@ class STREAM
         HASH hash
         )
     {
-        ByteArray ~= hash;
-    }
-
-    // ~~
-
-    void WriteTag(
-        string tag
-        )
-    {
-        WriteByte( tag[ 0 ] );
-        WriteByte( tag[ 1 ] );
-        WriteByte( tag[ 2 ] );
-        WriteByte( tag[ 3 ] );
-
-        SectionByteIndex = ByteArray.length;
-
-        WriteNatural64( 0 );
+        SectionByteArray ~= hash;
     }
 
     // ~~
@@ -188,25 +170,29 @@ class STREAM
         ulong
             section_byte_count;
 
-        if ( SectionByteIndex > 0 )
+        if ( SectionByteArray.length > 0 )
         {
-            section_byte_count = ByteArray.length - SectionByteIndex - 8;
+            section_byte_count = SectionByteArray.length;
 
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( section_byte_count & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 8 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 16 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 24 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 32 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 40 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 48 ) & 255 );
-            ByteArray[ SectionByteIndex++ ] = cast( ubyte )( ( section_byte_count >> 56 ) & 255 );
+            while ( section_byte_count > 127 )
+            {
+                ByteArray ~= cast( ubyte )( 128 | ( section_byte_count & 127 ) );
 
-            SectionByteIndex = 0;
+                section_byte_count >>= 7;
+            }
+
+            ByteArray ~= cast( ubyte )( section_byte_count & 127 );
+            ByteArray ~= SectionByteArray;
+
+            SectionByteArray.length = 0;
         }
 
         if ( tag != "" )
         {
-            WriteTag( tag );
+            ByteArray ~= tag[ 0 ];
+            ByteArray ~= tag[ 1 ];
+            ByteArray ~= tag[ 2 ];
+            ByteArray ~= tag[ 3 ];
         }
     }
 
@@ -237,12 +223,27 @@ class STREAM
 
     // ~~
 
-    ushort ReadNatural16(
+    ulong ReadNatural64(
         )
     {
-        return
-            ( cast( ushort )ReadByte() )
-            | ( ( cast( ushort )ReadByte() ) << 8 );
+        uint
+            bit_count;
+        ulong
+            natural,
+            byte_;
+
+        natural = 0;
+        bit_count = 0;
+
+        do
+        {
+            byte_ = cast( ulong )ReadByte();
+            natural |= ( byte_ & 127 ) << bit_count;
+            bit_count += 7;
+        }
+        while ( ( byte_ & 128 ) != 0 );
+
+        return natural;
     }
 
     // ~~
@@ -250,27 +251,15 @@ class STREAM
     uint ReadNatural32(
         )
     {
-        return
-            ( cast( uint )ReadByte() )
-            | ( ( cast( uint )ReadByte() ) << 8 )
-            | ( ( cast( uint )ReadByte() ) << 16 )
-            | ( ( cast( uint )ReadByte() ) << 24 );
+        return cast( uint )ReadNatural64();
     }
 
     // ~~
 
-    ulong ReadNatural64(
+    ushort ReadNatural16(
         )
     {
-        return
-            ( cast( ulong )ReadByte() )
-            | ( ( cast( ulong )ReadByte() ) << 8 )
-            | ( ( cast( ulong )ReadByte() ) << 16 )
-            | ( ( cast( ulong )ReadByte() ) << 24 )
-            | ( ( cast( ulong )ReadByte() ) << 32 )
-            | ( ( cast( ulong )ReadByte() ) << 40 )
-            | ( ( cast( ulong )ReadByte() ) << 48 )
-            | ( ( cast( ulong )ReadByte() ) << 56 );
+        return cast( ushort )ReadNatural64();
     }
 
     // ~~
@@ -282,7 +271,6 @@ class STREAM
             time;
 
         time.ByteArray = ByteArray[ ByteIndex .. ByteIndex + 16 ][ 0 .. 16 ];
-
         ByteIndex += 16;
 
         return time.SystemTime;
@@ -293,11 +281,10 @@ class STREAM
     string ReadText(
         )
     {
-        ushort
+        ulong
             character_count;
 
-        character_count = ReadNatural16();
-
+        character_count = ReadNatural64();
         ByteIndex += character_count;
 
         return ( cast( char[] )ByteArray[ ByteIndex - character_count .. ByteIndex ] ).to!string();
@@ -333,15 +320,20 @@ class STREAM
         string tag
         )
     {
+        ulong
+            section_byte_count;
+
         if ( HasTag( tag ) )
         {
-            ByteIndex += 12;
+            ByteIndex += 4;
+
+            section_byte_count = ReadNatural64();
 
             return true;
         }
         else
         {
-            writeln( "Section not found : ", tag );
+            writeln( "Section not found : ", tag, " (", ByteIndex, ")" );
 
             return false;
         }
