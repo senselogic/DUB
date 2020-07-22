@@ -24,7 +24,7 @@ import core.stdc.stdlib : exit;
 import core.time : msecs, Duration;
 import std.algorithm : countUntil, sort;
 import std.conv : to;
-import std.datetime : Clock, SysTime;
+import std.datetime : hnsecs, Clock, SysTime, UTC;
 import std.digest : toHexString;
 import std.digest.sha : SHA256;
 import std.file : copy, dirEntries, exists, getAttributes, getTimes, mkdir, mkdirRecurse, read, readText, remove, rename, rmdir, setAttributes, setTimes, write, PreserveAttributes, SpanMode;
@@ -41,18 +41,6 @@ const uint
 // -- TYPES
 
 alias HASH = ubyte[ 32 ];
-
-// ~~
-
-union TIME
-{
-    // -- ATTRIBUTES
-
-    SysTime
-        SystemTime;
-    ubyte[ 16 ]
-        ByteArray;
-}
 
 // ~~
 
@@ -129,21 +117,6 @@ class STREAM
 
     // ~~
 
-    void WriteSystemTime(
-        SysTime system_time
-        )
-    {
-        TIME
-            time;
-
-        time.SystemTime = system_time;
-        SectionByteArray ~= time.ByteArray;
-
-        assert( time.ByteArray.sizeof == time.SystemTime.sizeof );
-    }
-
-    // ~~
-
     void WriteText(
         string text
         )
@@ -198,7 +171,7 @@ class STREAM
 
     // ~~
 
-    void Save(
+    void SaveFile(
         string file_path
         )
     {
@@ -260,20 +233,6 @@ class STREAM
         )
     {
         return cast( ushort )ReadNatural64();
-    }
-
-    // ~~
-
-    SysTime ReadSystemTime(
-        )
-    {
-        TIME
-            time;
-
-        time.ByteArray = ByteArray[ ByteIndex .. ByteIndex + 16 ][ 0 .. 16 ];
-        ByteIndex += 16;
-
-        return time.SystemTime;
     }
 
     // ~~
@@ -340,7 +299,7 @@ class STREAM
 
     // ~~
 
-    void Load(
+    void LoadFile(
         string file_path
         )
     {
@@ -359,7 +318,7 @@ class SNAPSHOT_FOLDER
         SuperFolderIndex;
     string
         Name;
-    SysTime
+    ulong
         AccessTime,
         ModificationTime;
     uint
@@ -379,8 +338,8 @@ class SNAPSHOT_FOLDER
     {
         stream.WriteNatural32( SuperFolderIndex );
         stream.WriteText( Name );
-        stream.WriteSystemTime( AccessTime );
-        stream.WriteSystemTime( ModificationTime );
+        stream.WriteNatural64( AccessTime );
+        stream.WriteNatural64( ModificationTime );
         stream.WriteNatural32( AttributeMask );
     }
 
@@ -392,8 +351,8 @@ class SNAPSHOT_FOLDER
     {
         SuperFolderIndex = stream.ReadNatural32();
         Name = stream.ReadText();
-        AccessTime = stream.ReadSystemTime();
-        ModificationTime = stream.ReadSystemTime();
+        AccessTime = stream.ReadNatural64();
+        ModificationTime = stream.ReadNatural64();
         AttributeMask = stream.ReadNatural32();
     }
 }
@@ -413,8 +372,7 @@ class SNAPSHOT_FILE
     HASH
         Hash;
     ulong
-        ByteCount;
-    SysTime
+        ByteCount,
         AccessTime,
         ModificationTime;
     uint
@@ -430,10 +388,18 @@ class SNAPSHOT_FILE
 
     // ~~
 
+    string GetStoreName(
+        )
+    {
+        return cast( string )Hash.toHexString() ~ format( "%x", ByteCount );
+    }
+
+    // ~~
+
     string GetStoreFileName(
         )
     {
-        return cast( string )Hash.toHexString() ~ format( "%x", ByteCount ) ~ ".dbf";
+        return GetStoreName() ~ ".dbf";
     }
 
     // ~~
@@ -459,8 +425,8 @@ class SNAPSHOT_FILE
         stream.WriteText( Name );
         stream.WriteHash( Hash );
         stream.WriteNatural64( ByteCount );
-        stream.WriteSystemTime( AccessTime );
-        stream.WriteSystemTime( ModificationTime );
+        stream.WriteNatural64( AccessTime );
+        stream.WriteNatural64( ModificationTime );
         stream.WriteNatural32( AttributeMask );
     }
 
@@ -474,8 +440,8 @@ class SNAPSHOT_FILE
         Name = stream.ReadText();
         Hash = stream.ReadHash();
         ByteCount = stream.ReadNatural64();
-        AccessTime = stream.ReadSystemTime();
-        ModificationTime = stream.ReadSystemTime();
+        AccessTime = stream.ReadNatural64();
+        ModificationTime = stream.ReadNatural64();
         AttributeMask = stream.ReadNatural32();
     }
 }
@@ -488,7 +454,7 @@ class SNAPSHOT
 
     uint
         Version;
-    SysTime
+    ulong
         Time;
     string
         DataFolderPath;
@@ -514,7 +480,7 @@ class SNAPSHOT
     string GetFileName(
         )
     {
-        return ( Time.toISOString().replace( "T", "" ).replace( ".", "" ) ~ "0000000" )[ 0 .. 21 ] ~ ".dbs";
+        return Time.GetTimeStamp() ~ ".dbs";
     }
 
     // ~~
@@ -614,10 +580,10 @@ class SNAPSHOT
 
     // -- OPERATIONS
 
-    void ReadFolder(
+    void ScanFolder(
         string folder_path,
-        SysTime folder_access_time,
-        SysTime folder_modification_time,
+        ulong folder_access_time,
+        ulong folder_modification_time,
         uint folder_attribute_mask,
         uint super_folder_index
         )
@@ -640,7 +606,7 @@ class SNAPSHOT
         {
             if ( VerboseOptionIsEnabled )
             {
-                writeln( "Reading folder : ", DataFolderPath, relative_folder_path );
+                writeln( "Scanning folder : ", DataFolderPath, relative_folder_path );
             }
 
             snapshot_folder = new SNAPSHOT_FOLDER();
@@ -661,23 +627,24 @@ class SNAPSHOT
                     if ( folder_entry.isFile
                          && !folder_entry.isSymlink )
                     {
-                        file_path = folder_entry.name;
+                        file_path = folder_entry.name.GetLogicalPath();
                         file_name = file_path.GetFileName();
                         relative_file_path = GetRelativePath( folder_entry );
 
-                        if ( IsIncludedFile( "/" ~ relative_folder_path, "/" ~ relative_file_path, file_name ) )
+                        if ( IsIncludedFile( "/" ~ relative_folder_path, "/" ~ relative_file_path, file_name )
+                             && IsSelectedFile( "/" ~ relative_folder_path, "/" ~ relative_file_path, file_name ) )
                         {
                             if ( VerboseOptionIsEnabled )
                             {
-                                writeln( "Reading file : ", file_path );
+                                writeln( "Scanning file : ", file_path );
                             }
 
                             snapshot_file = new SNAPSHOT_FILE();
                             snapshot_file.Folder = FolderArray[ folder_index ];
                             snapshot_file.FolderIndex = folder_index;
                             snapshot_file.Name = file_name;
-                            snapshot_file.AccessTime = folder_entry.timeLastAccessed;
-                            snapshot_file.ModificationTime = folder_entry.timeLastModified;
+                            snapshot_file.AccessTime = folder_entry.timeLastAccessed.GetTime();
+                            snapshot_file.ModificationTime = folder_entry.timeLastModified.GetTime();
                             snapshot_file.AttributeMask = folder_entry.attributes;
                             snapshot_file.ByteCount = folder_entry.size;
 
@@ -694,10 +661,10 @@ class SNAPSHOT
                     if ( folder_entry.isDir
                          && !folder_entry.isSymlink )
                     {
-                        ReadFolder(
-                            folder_entry.name ~ '/',
-                            folder_entry.timeLastAccessed,
-                            folder_entry.timeLastModified,
+                        ScanFolder(
+                            folder_entry.name.GetLogicalPath() ~ '/',
+                            folder_entry.timeLastAccessed.GetTime(),
+                            folder_entry.timeLastModified.GetTime(),
                             folder_entry.attributes,
                             folder_index
                             );
@@ -706,14 +673,14 @@ class SNAPSHOT
             }
             catch ( Exception exception )
             {
-                Abort( "Can't read folder : " ~ folder_path );
+                Abort( "Can't scan folder : " ~ folder_path );
             }
         }
     }
 
     // ~~
 
-    void ReadFolder(
+    void ScanFolder(
         string folder_path
         )
     {
@@ -731,10 +698,10 @@ class SNAPSHOT
         attribute_mask = folder_path.getAttributes();
         folder_path.getTimes( access_time, modification_time );
 
-        ReadFolder(
+        ScanFolder(
             folder_path,
-            access_time,
-            modification_time,
+            access_time.GetTime(),
+            modification_time.GetTime(),
             attribute_mask,
             NoFolderIndex
             );
@@ -742,11 +709,11 @@ class SNAPSHOT
 
     // ~~
 
-    void ReadDataFolder(
+    void ScanDataFolder(
         )
     {
         Version = 1;
-        Time = Clock.currTime();
+        Time = Clock.currTime().GetTime();
         DataFolderPath = .DataFolderPath;
         FolderFilterArray = .FolderFilterArray.dup();
         FolderFilterIsInclusiveArray = .FolderFilterIsInclusiveArray.dup();
@@ -754,12 +721,12 @@ class SNAPSHOT
         FileFilterIsInclusiveArray = .FileFilterIsInclusiveArray.dup();
         SelectedFileFilterArray = .SelectedFileFilterArray.dup();
 
-        ReadFolder( DataFolderPath );
+        ScanFolder( DataFolderPath );
     }
 
     // ~~
 
-    void Save(
+    void SaveFile(
         string file_path
         )
     {
@@ -772,7 +739,7 @@ class SNAPSHOT
         stream.WriteNatural32( Version );
 
         stream.WriteSection( "TIME" );
-        stream.WriteSystemTime( Time );
+        stream.WriteNatural64( Time );
 
         stream.WriteSection( "DATA" );
         stream.WriteText( DataFolderPath );
@@ -834,12 +801,12 @@ class SNAPSHOT
         }
 
         stream.WriteSection();
-        stream.Save( file_path );
+        stream.SaveFile( file_path );
     }
 
     // ~~
 
-    void Load(
+    void LoadFile(
         string file_path
         )
     {
@@ -868,7 +835,7 @@ class SNAPSHOT
             stream;
 
         stream = new STREAM();
-        stream.Load( file_path );
+        stream.LoadFile( file_path );
 
         if ( stream.ReadSection( "DUBS" ) )
         {
@@ -877,7 +844,7 @@ class SNAPSHOT
 
         if ( stream.ReadSection( "TIME" ) )
         {
-            Time = stream.ReadSystemTime();
+            Time = stream.ReadNatural64();
         }
 
         if ( stream.ReadSection( "DATA" ) )
@@ -1086,7 +1053,7 @@ class ARCHIVE
             snapshot;
 
         snapshot = new SNAPSHOT();
-        snapshot.Load( FolderPath ~ snapshot_name ~ ".dbs" );
+        snapshot.LoadFile( FolderPath ~ snapshot_name ~ ".dbs" );
 
         return snapshot;
     }
@@ -1120,7 +1087,7 @@ class ARCHIVE
         SNAPSHOT snapshot
         )
     {
-        snapshot.Save( FolderPath ~ snapshot.GetFileName() );
+        snapshot.SaveFile( FolderPath ~ snapshot.GetFileName() );
     }
 }
 
@@ -1174,7 +1141,7 @@ class HISTORY
 
     // -- OPERATIONS
 
-    void Load(
+    void Scan(
         )
     {
         string
@@ -1184,13 +1151,13 @@ class HISTORY
         ARCHIVE
             archive;
 
-        writeln( "Reading history folder : ", FolderPath );
+        writeln( "Scanning history folder : ", FolderPath );
 
         foreach ( archive_folder_entry; dirEntries( FolderPath, SpanMode.shallow ) )
         {
             if ( archive_folder_entry.isDir )
             {
-                folder_path = archive_folder_entry.name;
+                folder_path = archive_folder_entry.name.GetLogicalPath();
                 archive_name = folder_path.GetFileName();
                 archive = new ARCHIVE( archive_name );
 
@@ -1198,7 +1165,7 @@ class HISTORY
 
                 foreach ( snapshot_folder_entry; dirEntries( archive_folder_entry, SpanMode.shallow ) )
                 {
-                    file_path = snapshot_folder_entry.name;
+                    file_path = snapshot_folder_entry.name.GetLogicalPath();
 
                     if ( file_path.endsWith( ".dbs" ) )
                     {
@@ -1271,7 +1238,7 @@ class STORE
 
     // ~~
 
-    void Load(
+    void Scan(
         )
     {
         string
@@ -1279,11 +1246,11 @@ class STORE
 
         if ( FolderPath.exists() )
         {
-            writeln( "Reading store folder : ", FolderPath );
+            writeln( "Scanning store folder : ", FolderPath );
 
             foreach ( folder_entry; dirEntries( FolderPath, SpanMode.breadth ) )
             {
-                file_path = folder_entry.name[ FolderPath.length .. $ ];
+                file_path = folder_entry.name.GetLogicalPath()[ FolderPath.length .. $ ];
 
                 if ( file_path.endsWith( ".dbf" ) )
                 {
@@ -1326,7 +1293,10 @@ class STORE
                 store_folder_path.AddFolder();
             }
 
-            writeln( "Writing file : ", store_file_path );
+            if ( VerboseOptionIsEnabled )
+            {
+                writeln( "Writing file : ", store_file_path );
+            }
 
             data_file_path.copy( store_file_path, PreserveAttributes.no );
         }
@@ -1453,7 +1423,10 @@ class STORE
                 store_file_path.copy( data_file_path, PreserveAttributes.no );
 
                 data_file_path.setAttributes( archive_snapshot_file.AttributeMask & ~1 );
-                data_file_path.setTimes( archive_snapshot_file.AccessTime, archive_snapshot_file.ModificationTime );
+                data_file_path.setTimes(
+                    archive_snapshot_file.AccessTime.GetTime(),
+                    archive_snapshot_file.ModificationTime.GetTime()
+                    );
                 data_file_path.setAttributes( archive_snapshot_file.AttributeMask );
             }
             else
@@ -1466,7 +1439,10 @@ class STORE
                 store_file_path.copy( data_file_path, PreserveAttributes.no );
 
                 data_file_path.setAttributes( archive_snapshot_file.AttributeMask );
-                data_file_path.setTimes( archive_snapshot_file.AccessTime, archive_snapshot_file.ModificationTime );
+                data_file_path.setTimes(
+                    archive_snapshot_file.AccessTime.GetTime(),
+                    archive_snapshot_file.ModificationTime.GetTime()
+                    );
             }
         }
         catch ( Exception exception )
@@ -1538,16 +1514,16 @@ class REPOSITORY
         FolderPath = RepositoryFolderPath;
         History = new HISTORY();
         Store = new STORE();
-        Load();
+        Scan();
     }
 
     // -- OPERATIONS
 
-    void Load(
+    void Scan(
         )
     {
-        History.Load();
-        Store.Load();
+        History.Scan();
+        Store.Scan();
     }
 
     // ~~
@@ -1558,10 +1534,10 @@ class REPOSITORY
         SNAPSHOT
             snapshot;
 
-        writeln( "Reading data folder : ", DataFolderPath );
+        writeln( "Scanning data folder : ", DataFolderPath );
 
         snapshot = new SNAPSHOT();
-        snapshot.ReadDataFolder();
+        snapshot.ScanDataFolder();
 
         return snapshot;
     }
@@ -1640,13 +1616,55 @@ class REPOSITORY
     void Find(
         )
     {
-        ARCHIVE
-            archive;
+        string
+            file_path;
         SNAPSHOT
             archive_snapshot;
 
-        archive = History.GetArchive();
-        archive_snapshot = archive.GetSnapshot();
+        foreach ( archive_name, archive; History.ArchiveMap )
+        {
+            if ( archive_name.globMatch( ArchiveFilter ) )
+            {
+                writeln( archive_name );
+
+                foreach ( snapshot_name; archive.SnapshotNameArray )
+                {
+                    if ( SnapshotFilter == ""
+                         || snapshot_name.globMatch( SnapshotFilter ) )
+                    {
+                        writeln( "    ", snapshot_name );
+
+                        archive_snapshot = archive.GetSnapshot( snapshot_name );
+
+                        foreach ( folder; archive_snapshot.FolderArray )
+                        {
+                            if ( IsIncludedFolder( "/" ~ folder.Path ) )
+                            {
+                                foreach ( file; folder.FileArray )
+                                {
+                                    file_path = file.GetFilePath();
+
+                                    if ( IsIncludedFile( "/" ~ folder.Path, "/" ~ file_path, file.Name )
+                                         && IsSelectedFile( "/" ~ folder.Path, "/" ~ file_path, file.Name ) )
+                                    {
+                                        writeln(
+                                            "        ",
+                                            file.GetStoreName(),
+                                            " | ",
+                                            file.ModificationTime.GetTimeStamp(),
+                                            " | ",
+                                            file_path,
+                                            " | ",
+                                            file.ByteCount
+                                            );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // ~~
@@ -1654,7 +1672,21 @@ class REPOSITORY
     void List(
         )
     {
-        // :TODO:
+        foreach ( archive_name, archive; History.ArchiveMap )
+        {
+            if ( archive_name.globMatch( ArchiveFilter ) )
+            {
+                writeln( "Archive : ", archive_name );
+
+                foreach ( snapshot_name; archive.SnapshotNameArray )
+                {
+                    if ( snapshot_name.globMatch( SnapshotFilter ) )
+                    {
+                        writeln( "    Snapshot : ", snapshot_name );
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1673,9 +1705,11 @@ bool[]
     FileFilterIsInclusiveArray,
     FolderFilterIsInclusiveArray;
 string
+    ArchiveFilter,
     ArchiveName,
     DataFolderPath,
     RepositoryFolderPath,
+    SnapshotFilter,
     SnapshotName;
 string[]
     ErrorMessageArray,
@@ -2077,7 +2111,10 @@ void AddFolder(
     string folder_path
     )
 {
-    writeln( "Adding folder : ", folder_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Adding folder : ", folder_path );
+    }
 
     try
     {
@@ -2100,7 +2137,10 @@ void RemoveFolder(
     string folder_path
     )
 {
-    writeln( "Removing folder : ", folder_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Removing folder : ", folder_path );
+    }
 
     try
     {
@@ -2122,7 +2162,10 @@ ubyte[] ReadByteArray(
     ubyte[]
         file_byte_array;
 
-    writeln( "Reading file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Reading file : ", file_path );
+    }
 
     try
     {
@@ -2143,7 +2186,10 @@ void WriteByteArray(
     ubyte[] file_byte_array
     )
 {
-    writeln( "Writing file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Writing file : ", file_path );
+    }
 
     try
     {
@@ -2164,7 +2210,10 @@ string ReadText(
     string
         file_text;
 
-    writeln( "Reading file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Reading file : ", file_path );
+    }
 
     try
     {
@@ -2185,7 +2234,10 @@ void WriteText(
     string file_text
     )
 {
-    writeln( "Writing file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Writing file : ", file_path );
+    }
 
     try
     {
@@ -2203,7 +2255,10 @@ void RemoveFile(
     string file_path
     )
 {
-    writeln( "Removing file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Removing file : ", file_path );
+    }
 
     try
     {
@@ -2228,7 +2283,10 @@ HASH GetFileHash(
     SHA256
         sha256;
 
-    writeln( "Hashing file : ", file_path );
+    if ( VerboseOptionIsEnabled )
+    {
+        writeln( "Hashing file : ", file_path );
+    }
 
     try
     {
@@ -2247,6 +2305,33 @@ HASH GetFileHash(
     }
 
     return hash;
+}
+
+// ~~
+
+ulong GetTime(
+    SysTime system_time
+    )
+{
+    return system_time.stdTime();
+}
+
+// ~~
+
+SysTime GetTime(
+    ulong time
+    )
+{
+    return SysTime( time, UTC() );
+}
+
+// ~~
+
+string GetTimeStamp(
+    ulong time
+    )
+{
+    return ( time.GetTime().toISOString().replace( "T", "" ).replace( "Z", "" ).replace( ".", "" ) ~ "0000000" )[ 0 .. 21 ];
 }
 
 // ~~
@@ -2278,8 +2363,10 @@ void main(
     ErrorMessageArray = null;
     DataFolderPath = "";
     RepositoryFolderPath = "";
-    SnapshotName = "";
     ArchiveName = "DEFAULT";
+    ArchiveFilter = "*";
+    SnapshotName = "";
+    SnapshotFilter = "*";
     BackupOptionIsEnabled = false;
     CheckOptionIsEnabled = false;
     CompareOptionIsEnabled = false;
@@ -2409,9 +2496,7 @@ void main(
         if ( ( option == "--backup"
                || option == "--check"
                || option == "--compare"
-               || option == "--restore"
-               || option == "--find"
-               || option == "--list" )
+               || option == "--restore" )
              && argument_array.length >= 1
              && argument_array[ 0 ].IsIdentifier() )
         {
@@ -2420,14 +2505,33 @@ void main(
             argument_array = argument_array[ 1 .. $ ];
         }
 
+        if ( ( option == "--find"
+               || option == "--list" )
+             && argument_array.length >= 1
+             && !argument_array[ 0 ].startsWith( "--" ) )
+        {
+            ArchiveFilter = argument_array[ 0 ];
+
+            argument_array = argument_array[ 1 .. $ ];
+        }
+
         if ( ( option == "--check"
                || option == "--compare"
-               || option == "--restore"
-               || option == "--find" )
+               || option == "--restore" )
              && argument_array.length >= 1
              && argument_array[ 0 ].IsIdentifier() )
         {
             SnapshotName = argument_array[ 0 ];
+
+            argument_array = argument_array[ 1 .. $ ];
+        }
+
+        if ( ( option == "--find"
+               || option == "--list" )
+             && argument_array.length >= 1
+             && !argument_array[ 0 ].startsWith( "--" ) )
+        {
+            SnapshotFilter = argument_array[ 0 ];
 
             argument_array = argument_array[ 1 .. $ ];
         }

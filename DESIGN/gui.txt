@@ -1,24 +1,3 @@
-
-REPOSITORY_FOLDER/
-    STORE/
-        12/34/<content_hash_hexa><file_size_hexa>.dbf
-        ...
-    SNAPSHOT/
-        YYYYMMDDHHMMSS.dbs
-            version
-            time
-            data_path
-            filters
-            name_count
-                character_count:name
-                ...
-            folder_count
-                access_time:modification_time:attribute_mask:parent_folder_index:name_index
-                ...
-            file_count
-                content_hash:file_size:access_time:modification_time:attribute_mask:folder_index:name_index
-                ...
-
 gui
     +---------------------------------------------------+
     |[PATH/TO/REPOSITORY_FOLDER/    ]| [YYYYMMDDHHMMSS*]|
@@ -38,6 +17,3 @@ gui
     +---------------------------------------------------+
     |[PATH/TO/DATA_FOLDER/          ]|   (Copy) (Clone) |
     +---------------------------------------------------+
-
-
-The latest snapshot is opened by default.

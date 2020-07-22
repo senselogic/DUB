@@ -34,11 +34,12 @@ dub [options]
 --restore DATA_FOLDER/ REPOSITORY_FOLDER/ : restore the data files from the default archive
 --restore DATA_FOLDER/ REPOSITORY_FOLDER/ archive_name : restore the data files from the latest snapshot of this archive
 --restore DATA_FOLDER/ REPOSITORY_FOLDER/ archive_name snapshot_name : restore the data files from a snapshot of this archive
---find REPOSITORY_FOLDER/ : find matching files in the snapshots of the default archive
---find REPOSITORY_FOLDER/ archive_name : find matching files in the snapshots of this archive
---find REPOSITORY_FOLDER/ archive_name snapshot_name : find matching files in a snapshot of this archive
---list REPOSITORY_FOLDER/ : list the snapshots of the default archive
---list REPOSITORY_FOLDER/ archive_name : list the snapshots of this archive
+--find REPOSITORY_FOLDER/ : find matching files in all snapshots
+--find REPOSITORY_FOLDER/ archive_filter : find matching files in the snapshots of matching archives
+--find REPOSITORY_FOLDER/ archive_filter snapshot_filter : find matching files in matching archive snapshots
+--list REPOSITORY_FOLDER/ : list the snapshots of all snapshots
+--list REPOSITORY_FOLDER/ archive_filter : list the snapshots of matching archives
+--list REPOSITORY_FOLDER/ archive_filter snapshot_filter : list matching archive snapshots
 --exclude FOLDER_FILTER/ : exclude matching folders
 --include FOLDER/ : include this folder
 --ignore file_filter : ignore matching files
