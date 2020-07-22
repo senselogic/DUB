@@ -23,7 +23,7 @@
 import core.stdc.stdlib : exit;
 import core.time : msecs, Duration;
 import std.algorithm : countUntil, sort;
-import std.conv : to;
+import std.conv : parse, to;
 import std.datetime : hnsecs, Clock, SysTime, UTC;
 import std.digest : toHexString;
 import std.digest.sha : SHA256;
@@ -31,7 +31,7 @@ import std.file : copy, dirEntries, exists, getAttributes, getTimes, mkdir, mkdi
 import std.format : format;
 import std.path : globMatch;
 import std.stdio : readln, writeln, File;
-import std.string : endsWith, indexOf, join, lastIndexOf, replace, startsWith, toLower, toUpper;
+import std.string : endsWith, indexOf, join, lastIndexOf, replace, split, startsWith, toLower, toUpper;
 
 // -- CONSTANTS
 
@@ -412,7 +412,16 @@ class SNAPSHOT_FILE
 
         store_file_name = GetStoreFileName();
 
-        return store_file_name[ 0 .. 2 ] ~ "/" ~ store_file_name[ 2 .. 4 ] ~ "/" ~ store_file_name;
+        return
+            store_file_name[ 0 .. 1 ]
+            ~ "/"
+            ~ store_file_name[ 1 .. 2 ]
+            ~ "/"
+            ~ store_file_name[ 2 .. 3 ]
+            ~ "/"
+            ~ store_file_name[ 3 .. 4 ]
+            ~ "/"
+            ~ store_file_name;
     }
 
     // -- OPERATIONS
@@ -1118,6 +1127,15 @@ class HISTORY
 
     // -- INQUIRIES
 
+    string GetSnapshotName(
+        string file_path
+        )
+    {
+        return file_path.GetFileName()[ 0 .. $ - 4 ];
+    }
+
+    // ~~
+
     ARCHIVE GetArchive(
         )
     {
@@ -1169,7 +1187,7 @@ class HISTORY
 
                     if ( file_path.endsWith( ".dbs" ) )
                     {
-                        archive.SnapshotNameArray ~= file_path.GetFileName()[ 0 .. $ - 4 ];
+                        archive.SnapshotNameArray ~= GetSnapshotName( file_path );
                     }
                 }
 
@@ -1205,21 +1223,6 @@ class STORE
 
     // -- INQUIRIES
 
-    string GetFilePath(
-        string file_name
-        )
-    {
-        return
-            FolderPath
-            ~ file_name[ 0 .. 2 ]
-            ~ "/"
-            ~ file_name[ 2 .. 4 ]
-            ~ "/"
-            ~ file_name;
-    }
-
-    // ~~
-
     bool HasFilePath(
         string file_path
         )
@@ -1227,16 +1230,33 @@ class STORE
         return ( file_path in HasFilePathMap ) != null;
     }
 
-    // -- OPERATIONS
+    // ~~
 
-    void AddFilePath(
-        string file_path
+    bool IsValidFilePath(
+        string file_path,
+        ulong byte_count
         )
     {
-        HasFilePathMap[ file_path ] = true;
+        string
+            file_name,
+            hexadecimal_byte_count;
+
+        file_name = file_path.GetFileName().split( '.' )[ 0 ];
+
+        if ( file_name.length > 64 )
+        {
+            hexadecimal_byte_count = file_name[ 64 .. $ ];
+
+            return parse!long( hexadecimal_byte_count, 16 ) == byte_count;
+        }
+        else
+        {
+            return false;
+        }
     }
 
-    // ~~
+
+    // -- OPERATIONS
 
     void Scan(
         )
@@ -1254,7 +1274,14 @@ class STORE
 
                 if ( file_path.endsWith( ".dbf" ) )
                 {
-                    AddFilePath( file_path );
+                    if ( IsValidFilePath( file_path, folder_entry.size ) )
+                    {
+                        HasFilePathMap[ file_path ] = true;
+                    }
+                    else
+                    {
+                        writeln( "Invalid file : ", file_path );
+                    }
                 }
             }
         }
