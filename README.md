@@ -58,34 +58,34 @@ dub --backup DATA_FOLDER/ REPOSITORY_FOLDER/
 Backups the data files into the default archive of this repository.
 
 ```bash
-dub --backup DATA_FOLDER/ REPOSITORY_FOLDER/ MONDAY --excude "/TEMP/"
+dub --backup DATA_FOLDER/ REPOSITORY_FOLDER/ SUNDAY --exclude "/TEMP/"
 ```
 
-Backups the data files into the `MONDAY` archive of this repository, excluding the `TEMP` root folder.
+Backups the data files into the `SUNDAY` archive of this repository, excluding the `TEMP` root folder.
 
 ```bash
-dub --check DATA_FOLDER/ REPOSITORY_FOLDER MONDAY
+dub --check DATA_FOLDER/ REPOSITORY_FOLDER/ SUNDAY
 ```
 
-Checks the latest snapshot of the `MONDAY` archive of this repository.
+Checks the latest snapshot of the `SUNDAY` archive of this repository.
 
 ```bash
-dub --compare REPOSITORY_FOLDER MONDAY
+dub --compare DATA_FOLDER/ REPOSITORY_FOLDER/ SUNDAY
 ```
 
-Compares the data files to the latest snapshot of the `MONDAY` archive of this repository.
+Compares the data files to the latest snapshot of the `SUNDAY` archive of this repository.
 
 ```bash
-dub --restore DATA_FOLDER/ REPOSITORY_FOLDER/ MONDAY
+dub --restore DATA_FOLDER/ REPOSITORY_FOLDER/ SUNDAY
 ```
 
 Restore the data files from the default archive.
 
 ```bash
-dub --restore DATA_FOLDER/ REPOSITORY_FOLDER/ MONDAY 202007052054138436
+dub --restore DATA_FOLDER/ REPOSITORY_FOLDER/ SUNDAY 202007052054138436
 ```
 
-Restore the data files from the `202007191717441348878` snapshot of the `MONDAY` archive of this repository.
+Restore the data files from the `202007191717441348878` snapshot of the `SUNDAY` archive of this repository.
 
 ```bash
 dub --find REPOSITORY_FOLDER/ --select "/A/*.tmp"

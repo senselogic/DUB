@@ -699,11 +699,6 @@ class SNAPSHOT
             access_time,
             modification_time;
 
-        if ( !folder_path.exists() )
-        {
-            folder_path.AddFolder();
-        }
-
         attribute_mask = folder_path.getAttributes();
         folder_path.getTimes( access_time, modification_time );
 
@@ -729,6 +724,18 @@ class SNAPSHOT
         FileFilterArray = .FileFilterArray.dup();
         FileFilterIsInclusiveArray = .FileFilterIsInclusiveArray.dup();
         SelectedFileFilterArray = .SelectedFileFilterArray.dup();
+
+        if ( !DataFolderPath.exists() )
+        {
+            if ( BackupOptionIsEnabled )
+            {
+                Abort( "Missing data folder : " ~ DataFolderPath );
+            }
+            else
+            {
+                DataFolderPath.AddFolder();
+            }
+        }
 
         ScanFolder( DataFolderPath );
     }
@@ -1116,25 +1123,40 @@ class HISTORY
     this(
         )
     {
+        string
+            archive_folder_path;
+
         FolderPath = RepositoryFolderPath ~ "SNAPSHOT/";
 
         if ( !FolderPath.exists() )
         {
-            FolderPath.AddFolder();
-            ( FolderPath ~ "DEFAULT/" ).AddFolder();
+            if ( BackupOptionIsEnabled )
+            {
+                FolderPath.AddFolder();
+            }
+            else
+            {
+                Abort( "Missing history folder : " ~ FolderPath );
+            }
+        }
+
+        archive_folder_path = FolderPath ~ ArchiveName ~ "/";
+
+        if ( !archive_folder_path.exists() )
+        {
+            if ( BackupOptionIsEnabled )
+            {
+                archive_folder_path.AddFolder();
+            }
+            else
+            {
+                Abort( "Missing archive folder : " ~ FolderPath );
+            }
         }
     }
 
     // -- INQUIRIES
 
-    string GetSnapshotName(
-        string file_path
-        )
-    {
-        return file_path.GetFileName()[ 0 .. $ - 4 ];
-    }
-
-    // ~~
 
     ARCHIVE GetArchive(
         )
@@ -1154,7 +1176,15 @@ class HISTORY
 
             return null;
         }
+    }
 
+    // ~~
+
+    string GetSnapshotName(
+        string file_path
+        )
+    {
+        return file_path.GetFileName()[ 0 .. $ - 4 ];
     }
 
     // -- OPERATIONS
@@ -1217,7 +1247,14 @@ class STORE
 
         if ( !FolderPath.exists() )
         {
-            FolderPath.AddFolder();
+            if ( BackupOptionIsEnabled )
+            {
+                FolderPath.AddFolder();
+            }
+            else
+            {
+                Abort( "Missing store folder : " ~ FolderPath );
+            }
         }
     }
 
@@ -1268,21 +1305,28 @@ class STORE
         {
             writeln( "Scanning store folder : ", FolderPath );
 
-            foreach ( folder_entry; dirEntries( FolderPath, SpanMode.breadth ) )
+            try
             {
-                file_path = folder_entry.name.GetLogicalPath()[ FolderPath.length .. $ ];
-
-                if ( file_path.endsWith( ".dbf" ) )
+                foreach ( folder_entry; dirEntries( FolderPath, SpanMode.breadth ) )
                 {
-                    if ( IsValidFilePath( file_path, folder_entry.size ) )
+                    file_path = folder_entry.name.GetLogicalPath()[ FolderPath.length .. $ ];
+
+                    if ( file_path.endsWith( ".dbf" ) )
                     {
-                        HasFilePathMap[ file_path ] = true;
-                    }
-                    else
-                    {
-                        writeln( "Invalid file : ", file_path );
+                        if ( IsValidFilePath( file_path, folder_entry.size ) )
+                        {
+                            HasFilePathMap[ file_path ] = true;
+                        }
+                        else
+                        {
+                            writeln( "Invalid file : ", file_path );
+                        }
                     }
                 }
+            }
+            catch ( Exception exception )
+            {
+                Abort( "Can't scan folder : " ~ FolderPath, exception );
             }
         }
         else
@@ -1308,24 +1352,31 @@ class STORE
         data_snapshot_file.Hash = data_file_path.GetFileHash();
         store_file_path = data_snapshot_file.GetStoreFilePath();
 
+        writeln( "Backuping file : ", data_file_path );
+
+        store_file_path = FolderPath ~ store_file_path;
+        store_folder_path = store_file_path.GetFolderPath();
+
+        if ( !store_folder_path.exists() )
+        {
+            store_folder_path.AddFolder();
+        }
+
+        if ( VerboseOptionIsEnabled )
+        {
+            writeln( "Writing file : ", store_file_path );
+        }
+
         if ( !HasFilePath( store_file_path ) )
         {
-            writeln( "Backuping file : ", data_file_path );
-
-            store_file_path = FolderPath ~ store_file_path;
-            store_folder_path = store_file_path.GetFolderPath();
-
-            if ( !store_folder_path.exists() )
+            try
             {
-                store_folder_path.AddFolder();
+                data_file_path.copy( store_file_path, PreserveAttributes.no );
             }
-
-            if ( VerboseOptionIsEnabled )
+            catch ( Exception exception )
             {
-                writeln( "Writing file : ", store_file_path );
+                Abort( "Can't backup file : " ~ data_file_path ~ " => " ~ store_file_path, exception, false );
             }
-
-            data_file_path.copy( store_file_path, PreserveAttributes.no );
         }
     }
 
@@ -1429,17 +1480,17 @@ class STORE
         data_file_path = DataFolderPath ~ archive_snapshot_file.GetFilePath();
         store_file_path = FolderPath ~ archive_snapshot_file.GetStoreFilePath();
 
+        data_folder_path = data_file_path.GetFolderPath();
+
+        writeln( "Restoring file : ", data_file_path );
+
+        if ( !data_folder_path.exists() )
+        {
+            data_folder_path.AddFolder();
+        }
+
         try
         {
-            data_folder_path = data_file_path.GetFolderPath();
-
-            writeln( "Restoring file : ", data_file_path );
-
-            if ( !data_folder_path.exists() )
-            {
-                data_folder_path.AddFolder();
-            }
-
             version ( Windows )
             {
                 if ( data_file_path.exists() )
@@ -1539,6 +1590,19 @@ class REPOSITORY
         )
     {
         FolderPath = RepositoryFolderPath;
+
+        if ( !FolderPath.exists() )
+        {
+            if ( BackupOptionIsEnabled )
+            {
+                FolderPath.AddFolder();
+            }
+            else
+            {
+                Abort( "Missing repository folder : " ~ FolderPath );
+            }
+        }
+
         History = new HISTORY();
         Store = new STORE();
         Scan();
