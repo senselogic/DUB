@@ -2270,10 +2270,7 @@ void AddFolder(
     string folder_path
     )
 {
-    if ( VerboseOptionIsEnabled )
-    {
-        writeln( "Adding folder : ", folder_path );
-    }
+    writeln( "Adding folder : ", folder_path );
 
     try
     {
