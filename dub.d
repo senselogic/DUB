@@ -424,6 +424,17 @@ class SNAPSHOT_FILE
             ~ store_file_name;
     }
 
+    // ~~
+
+    bool IsSame(
+        SNAPSHOT_FILE snapshot_file
+        )
+    {
+        return
+            ByteCount == snapshot_file.ByteCount
+            && ModificationTime == snapshot_file.ModificationTime;
+    }
+
     // -- OPERATIONS
 
     void Write(
@@ -515,6 +526,24 @@ class SNAPSHOT
 
     // ~~
 
+    SNAPSHOT_FOLDER GetFolder(
+        SNAPSHOT_FOLDER snapshot_folder
+        )
+    {
+        return GetFolder( snapshot_folder.Path );
+    }
+
+    // ~~
+
+    bool HasFolder(
+        SNAPSHOT_FOLDER snapshot_folder
+        )
+    {
+        return GetFolder( snapshot_folder.Path ) !is null;
+    }
+
+    // ~~
+
     SNAPSHOT_FILE GetFile(
         string folder_path,
         string file_name
@@ -548,11 +577,11 @@ class SNAPSHOT
 
     // ~~
 
-    bool HasFolder(
-        SNAPSHOT_FOLDER snapshot_folder
+    SNAPSHOT_FILE GetFile(
+        SNAPSHOT_FILE snapshot_file
         )
     {
-        return GetFolder( snapshot_folder.Path ) !is null;
+        return GetFile( snapshot_file.Folder.Path, snapshot_file.Name );
     }
 
     // ~~
@@ -576,8 +605,7 @@ class SNAPSHOT
         found_snapshot_file = GetFile( snapshot_file.Folder.Path, snapshot_file.Name );
 
         if ( found_snapshot_file !is null
-             && found_snapshot_file.ByteCount == snapshot_file.ByteCount
-             && found_snapshot_file.ModificationTime == snapshot_file.ModificationTime )
+             && found_snapshot_file.IsSame( snapshot_file ) )
         {
             return found_snapshot_file;
         }
@@ -1414,6 +1442,64 @@ class STORE
 
     // ~~
 
+    void CheckDataFolder(
+        SNAPSHOT data_snapshot,
+        SNAPSHOT archive_snapshot
+        )
+    {
+    }
+
+    // ~~
+
+    void CompareDataFolder(
+        SNAPSHOT data_snapshot,
+        SNAPSHOT archive_snapshot
+        )
+    {
+        SNAPSHOT_FILE
+            found_data_snapshot_file;
+
+        foreach ( archive_snapshot_file; archive_snapshot.FileArray )
+        {
+            found_data_snapshot_file = data_snapshot.GetFile( archive_snapshot_file );
+
+            if ( found_data_snapshot_file is null )
+            {
+                writeln( "Missing archive file : ", archive_snapshot_file.GetFilePath() );
+            }
+            else if ( !found_data_snapshot_file.IsSame( archive_snapshot_file ) )
+            {
+                writeln( "Changed archive file : ", archive_snapshot_file.GetFilePath() );
+            }
+        }
+
+        foreach ( archive_snapshot_folder; archive_snapshot.FolderArray )
+        {
+            if ( !data_snapshot.HasFolder( archive_snapshot_folder ) )
+            {
+                writeln( "Missing archive folder : ", archive_snapshot_folder.Path );
+            }
+        }
+
+        foreach ( data_snapshot_file; data_snapshot.FileArray )
+        {
+            if ( !archive_snapshot.HasFile( data_snapshot_file ) )
+            {
+                writeln( "Missing data file : ", data_snapshot_file.GetFilePath() );
+            }
+        }
+
+        foreach ( data_snapshot_folder; data_snapshot.FolderArray )
+        {
+            if ( !archive_snapshot.HasFolder( data_snapshot_folder ) )
+            {
+                writeln( "Missing data folder : ", data_snapshot_folder.Path );
+            }
+        }
+    }
+
+    // ~~
+
     void RemoveDataFolder(
         SNAPSHOT_FOLDER data_snapshot_folder
         )
@@ -1527,24 +1613,6 @@ class STORE
         {
             Abort( "Can't restore file : " ~ store_file_path ~ " => " ~ data_file_path, exception, false );
         }
-    }
-
-    // ~~
-
-    void CheckDataFolder(
-        SNAPSHOT data_snapshot,
-        SNAPSHOT archive_snapshot
-        )
-    {
-    }
-
-    // ~~
-
-    void CompareDataFolder(
-        SNAPSHOT data_snapshot,
-        SNAPSHOT archive_snapshot
-        )
-    {
     }
 
     // ~~
@@ -2228,10 +2296,7 @@ void RemoveFolder(
     string folder_path
     )
 {
-    if ( VerboseOptionIsEnabled )
-    {
-        writeln( "Removing folder : ", folder_path );
-    }
+    writeln( "Removing folder : ", folder_path );
 
     try
     {
@@ -2346,10 +2411,7 @@ void RemoveFile(
     string file_path
     )
 {
-    if ( VerboseOptionIsEnabled )
-    {
-        writeln( "Removing file : ", file_path );
-    }
+    writeln( "Removing file : ", file_path );
 
     try
     {
