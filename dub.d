@@ -643,7 +643,7 @@ class SNAPSHOT
         {
             if ( VerboseOptionIsEnabled )
             {
-                writeln( "Scanning folder : ", DataFolderPath, relative_folder_path );
+                writeln( "Scanning data folder : ", DataFolderPath, relative_folder_path );
             }
 
             snapshot_folder = new SNAPSHOT_FOLDER();
@@ -673,7 +673,7 @@ class SNAPSHOT
                         {
                             if ( VerboseOptionIsEnabled )
                             {
-                                writeln( "Scanning file : ", file_path );
+                                writeln( "Scanning data file : ", file_path );
                             }
 
                             snapshot_file = new SNAPSHOT_FILE();
@@ -1351,14 +1351,14 @@ class STORE
                         }
                         else
                         {
-                            writeln( "Invalid file : ", file_path );
+                            writeln( "Invalid store file : ", file_path );
                         }
                     }
                 }
             }
             catch ( Exception exception )
             {
-                Abort( "Can't scan folder : " ~ FolderPath, exception );
+                Abort( "Can't scan store folder : " ~ FolderPath, exception );
             }
         }
         else
@@ -1384,7 +1384,7 @@ class STORE
         data_snapshot_file.Hash = data_file_path.GetFileHash();
         store_file_path = data_snapshot_file.GetStoreFilePath();
 
-        writeln( "Backuping file : ", data_file_path );
+        writeln( "Backuping data file : ", data_file_path );
 
         store_file_path = FolderPath ~ store_file_path;
         store_folder_path = store_file_path.GetFolderPath();
@@ -1396,7 +1396,7 @@ class STORE
 
         if ( VerboseOptionIsEnabled )
         {
-            writeln( "Writing file : ", store_file_path );
+            writeln( "Writing store file : ", store_file_path );
         }
 
         if ( !HasFilePath( store_file_path ) )
@@ -1407,7 +1407,7 @@ class STORE
             }
             catch ( Exception exception )
             {
-                Abort( "Can't backup file : " ~ data_file_path ~ " => " ~ store_file_path, exception, false );
+                Abort( "Can't backup data file : " ~ data_file_path ~ " => " ~ store_file_path, exception, false );
             }
         }
     }
@@ -1572,7 +1572,7 @@ class STORE
 
         data_folder_path = data_file_path.GetFolderPath();
 
-        writeln( "Restoring file : ", data_file_path );
+        writeln( "Restoring data file : ", data_file_path );
 
         if ( !data_folder_path.exists() )
         {
