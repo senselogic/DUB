@@ -1788,15 +1788,13 @@ class REPOSITORY
         {
             if ( archive_name.globMatch( ArchiveFilter ) )
             {
-                writeln( archive_name );
+                writeln( "Reading archive folder : ", archive.FolderPath );
 
                 foreach ( snapshot_name; archive.SnapshotNameArray )
                 {
                     if ( SnapshotFilter == ""
                          || snapshot_name.globMatch( SnapshotFilter ) )
                     {
-                        writeln( "    ", snapshot_name );
-
                         archive_snapshot = archive.GetSnapshot( snapshot_name );
 
                         foreach ( folder; archive_snapshot.FolderArray )
@@ -1811,7 +1809,7 @@ class REPOSITORY
                                          && IsSelectedFile( "/" ~ folder.Path, "/" ~ file_path, file.Name ) )
                                     {
                                         writeln(
-                                            "        ",
+                                            "    ",
                                             file.GetStoreName(),
                                             " | ",
                                             file.ModificationTime.GetTimeStamp(),
