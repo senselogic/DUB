@@ -777,6 +777,8 @@ class SNAPSHOT
         STREAM
             stream;
 
+        writeln( "Writing snapshot file : ", file_path );
+
         stream = new STREAM();
 
         stream.WriteSection( "DUBS" );
@@ -877,6 +879,8 @@ class SNAPSHOT
             snapshot_folder;
         STREAM
             stream;
+
+        writeln( "Reading snapshot file : ", file_path );
 
         stream = new STREAM();
         stream.LoadFile( file_path );
