@@ -543,13 +543,9 @@ class SNAPSHOT_FILE
         store_file_name = GetStoreFileName();
 
         return
-            store_file_name[ 0 .. 1 ]
+            store_file_name[ 0 .. 2 ]
             ~ "/"
-            ~ store_file_name[ 1 .. 2 ]
-            ~ "/"
-            ~ store_file_name[ 2 .. 3 ]
-            ~ "/"
-            ~ store_file_name[ 3 .. 4 ]
+            ~ store_file_name[ 2 .. 4 ]
             ~ "/"
             ~ store_file_name;
     }
