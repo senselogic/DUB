@@ -44,7 +44,7 @@ alias HASH = ubyte[ 32 ];
 
 // ~~
 
-class STREAM
+class BUFFER
 {
     // -- ATTRIBUTES
 
@@ -52,8 +52,10 @@ class STREAM
         ByteArray;
     ulong
         ByteIndex;
-    ubyte[]
-        SectionByteArray;
+    string[]
+        TagArray;
+    ulong[ string ]
+        TagIndexMap;
 
     // -- INQUIRIES
 
@@ -65,11 +67,11 @@ class STREAM
 
     // -- OPERATIONS
 
-    void WriteByte(
-        ubyte byte_
+    void Clear(
         )
     {
-        SectionByteArray ~= byte_;
+        ByteArray.length = 0;
+        ByteIndex = 0;
     }
 
     // ~~
@@ -78,32 +80,16 @@ class STREAM
         bool boolean
         )
     {
-        SectionByteArray ~= boolean ? 1 : 0;
+        ByteArray ~= boolean ? 1 : 0;
     }
 
     // ~~
 
-    void WriteNatural64(
-        ulong natural
+    void WriteByte(
+        ubyte byte_
         )
     {
-        while ( natural > 127 )
-        {
-            SectionByteArray ~= cast( ubyte )( 128 | ( natural & 127 ) );
-
-            natural >>= 7;
-        }
-
-        SectionByteArray ~= cast( ubyte )( natural & 127 );
-    }
-
-    // ~~
-
-    void WriteNatural32(
-        uint natural
-        )
-    {
-        WriteNatural64( natural );
+        ByteArray ~= byte_;
     }
 
     // ~~
@@ -117,12 +103,46 @@ class STREAM
 
     // ~~
 
-    void WriteText(
-        string text
+    void WriteNatural32(
+        uint natural
         )
     {
-        WriteNatural64( text.length );
-        SectionByteArray ~= cast( ubyte[] )text[ 0 .. $ ];
+        WriteNatural64( natural );
+    }
+
+    // ~~
+
+    void WriteNatural64(
+        ulong natural
+        )
+    {
+        while ( natural > 127 )
+        {
+            ByteArray ~= cast( ubyte )( 128 | ( natural & 127 ) );
+
+            natural >>= 7;
+        }
+
+        ByteArray ~= cast( ubyte )( natural & 127 );
+    }
+
+    // ~~
+
+    void WriteInteger64(
+        long integer
+        )
+    {
+        ulong
+            natural;
+
+        natural = ( ( cast( ulong )integer ) & 0x7FFFFFFFFFFFFFFF ) << 1;
+
+        if ( integer < 0 )
+        {
+            natural = ~natural | 1;
+        }
+
+        WriteNatural64( natural );
     }
 
     // ~~
@@ -131,41 +151,41 @@ class STREAM
         HASH hash
         )
     {
-        SectionByteArray ~= hash;
+        ByteArray ~= hash;
     }
 
     // ~~
 
-    void WriteSection(
-        string tag = ""
+    void WriteText(
+        string text
         )
     {
-        ulong
-            section_byte_count;
+        WriteNatural64( text.length );
+        ByteArray ~= cast( ubyte[] )text[ 0 .. $ ];
+    }
 
-        if ( SectionByteArray.length > 0 )
+    // ~~
+
+    void WriteTag(
+        string tag
+        )
+    {
+        ulong *
+            found_tag_index;
+
+        found_tag_index = tag in TagIndexMap;
+
+        if ( found_tag_index !is null )
         {
-            section_byte_count = SectionByteArray.length;
-
-            while ( section_byte_count > 127 )
-            {
-                ByteArray ~= cast( ubyte )( 128 | ( section_byte_count & 127 ) );
-
-                section_byte_count >>= 7;
-            }
-
-            ByteArray ~= cast( ubyte )( section_byte_count & 127 );
-            ByteArray ~= SectionByteArray;
-
-            SectionByteArray.length = 0;
+            WriteNatural64( ( *found_tag_index << 1 ) | 1 );
         }
-
-        if ( tag != "" )
+        else
         {
-            ByteArray ~= tag[ 0 ];
-            ByteArray ~= tag[ 1 ];
-            ByteArray ~= tag[ 2 ];
-            ByteArray ~= tag[ 3 ];
+            TagIndexMap[ tag ] = TagArray.length;
+            TagArray ~= tag;
+
+            WriteNatural64( tag.length << 1 );
+            ByteArray ~= cast( ubyte[] )tag[ 0 .. $ ];
         }
     }
 
@@ -180,6 +200,14 @@ class STREAM
 
     // ~~
 
+    bool ReadBoolean(
+        )
+    {
+        return ReadByte() != 0;
+    }
+
+    // ~~
+
     ubyte ReadByte(
         )
     {
@@ -188,10 +216,18 @@ class STREAM
 
     // ~~
 
-    bool ReadBoolean(
+    ushort ReadNatural16(
         )
     {
-        return ReadByte() != 0;
+        return cast( ushort )ReadNatural64();
+    }
+
+    // ~~
+
+    uint ReadNatural32(
+        )
+    {
+        return cast( uint )ReadNatural64();
     }
 
     // ~~
@@ -221,18 +257,32 @@ class STREAM
 
     // ~~
 
-    uint ReadNatural32(
+    long ReadInteger64(
         )
     {
-        return cast( uint )ReadNatural64();
+        ulong
+            natural;
+
+        natural = ReadNatural64();
+
+        if ( ( natural & 1 ) == 0 )
+        {
+            return cast( long )( natural >> 1 );
+        }
+        else
+        {
+            return cast( long )( ~( natural >> 1 ) | 0x8000000000000000 );
+        }
     }
 
     // ~~
 
-    ushort ReadNatural16(
+    HASH ReadHash(
         )
     {
-        return cast( ushort )ReadNatural64();
+        ByteIndex += 32;
+
+        return ByteArray[ ByteIndex - 32 .. ByteIndex ][ 0 .. 32 ];
     }
 
     // ~~
@@ -251,12 +301,33 @@ class STREAM
 
     // ~~
 
-    HASH ReadHash(
+    string ReadTag(
         )
     {
-        ByteIndex += 32;
+        string
+            tag;
+        ulong
+            character_count,
+            natural;
 
-        return ByteArray[ ByteIndex - 32 .. ByteIndex ][ 0 .. 32 ];
+        natural = ReadNatural64();
+
+        if ( ( natural & 1 ) == 0 )
+        {
+            character_count = natural >> 1;
+
+            ByteIndex += character_count;
+            tag = ( cast( char[] )ByteArray[ ByteIndex - character_count .. ByteIndex ] ).to!string();
+
+            TagIndexMap[ tag ] = TagArray.length;
+            TagArray ~= tag;
+
+            return tag;
+        }
+        else
+        {
+            return TagArray[ natural >> 1 ];
+        }
     }
 
     // ~~
@@ -265,37 +336,26 @@ class STREAM
         string tag
         )
     {
-        return
-            ByteIndex + 4 <= ByteArray.length
-            && ByteArray[ ByteIndex ] == tag[ 0 ]
-            && ByteArray[ ByteIndex + 1 ] == tag[ 1 ]
-            && ByteArray[ ByteIndex + 2 ] == tag[ 2 ]
-            && ByteArray[ ByteIndex + 3 ] == tag[ 3 ];
-    }
-
-    // ~~
-
-    bool ReadSection(
-        string tag
-        )
-    {
+        string
+            found_tag;
         ulong
-            section_byte_count;
+            byte_index;
 
-        if ( HasTag( tag ) )
+        byte_index = ByteIndex;
+        found_tag = ReadTag();
+
+        if ( found_tag == tag )
         {
-            ByteIndex += 4;
-            section_byte_count = ReadNatural64();
-
             return true;
         }
         else
         {
-            writeln( "Section not found : ", tag, " (", ByteIndex, ")" );
+            ByteIndex = byte_index;
 
             return false;
         }
     }
+
 
     // ~~
 
@@ -305,6 +365,76 @@ class STREAM
     {
         ByteArray = file_path.ReadByteArray();
         ByteIndex = 0;
+    }
+}
+
+// ~~
+
+class STREAM : BUFFER
+{
+    // -- ATTRIBUTES
+
+    BUFFER
+        SectionBuffer;
+
+    // -- CONSTRUCTORS
+
+    this(
+        )
+    {
+        SectionBuffer = new BUFFER();
+    }
+
+    // -- OPERATIONS
+
+    void WriteSection(
+        string tag = ""
+        )
+    {
+        if ( ByteArray.length > 0 )
+        {
+            SectionBuffer.WriteNatural64( ByteArray.length );
+            SectionBuffer.ByteArray ~= ByteArray;
+            ByteArray.length = 0;
+        }
+
+        if ( tag != "" )
+        {
+            SectionBuffer.WriteTag( tag );
+        }
+    }
+
+    // ~~
+
+    override void SaveFile(
+        string file_path
+        )
+    {
+        file_path.WriteByteArray( SectionBuffer.ByteArray );
+    }
+    // ~~
+
+    bool ReadSection(
+        string tag
+        )
+    {
+        string
+            found_tag;
+        ulong
+            section_byte_count;
+
+        if ( HasTag( tag ) )
+        {
+            section_byte_count = ReadNatural64();
+
+            return true;
+        }
+        else
+        {
+            writeln( "Missing tag : ", tag, " (", ByteIndex, ")" );
+
+            return false;
+        }
     }
 }
 
@@ -781,16 +911,16 @@ class SNAPSHOT
 
         stream = new STREAM();
 
-        stream.WriteSection( "DUBS" );
+        stream.WriteSection( "Version" );
         stream.WriteNatural32( Version );
 
-        stream.WriteSection( "TIME" );
+        stream.WriteSection( "Time" );
         stream.WriteNatural64( Time );
 
-        stream.WriteSection( "DATA" );
+        stream.WriteSection( "DataFolderPath" );
         stream.WriteText( DataFolderPath );
 
-        stream.WriteSection( "FOLF" );
+        stream.WriteSection( "FolderFilterArray" );
         stream.WriteNatural32( cast( uint )FolderFilterArray.length );
 
         foreach ( folder_filter; FolderFilterArray )
@@ -798,7 +928,7 @@ class SNAPSHOT
             stream.WriteText( folder_filter );
         }
 
-        stream.WriteSection( "FOLI" );
+        stream.WriteSection( "FolderFilterIsInclusiveArray" );
         stream.WriteNatural32( cast( uint )FolderFilterIsInclusiveArray.length );
 
         foreach ( folder_filter_is_inclusive; FolderFilterIsInclusiveArray )
@@ -806,7 +936,7 @@ class SNAPSHOT
             stream.WriteBoolean( folder_filter_is_inclusive );
         }
 
-        stream.WriteSection( "FILF" );
+        stream.WriteSection( "FileFilterArray" );
         stream.WriteNatural32( cast( uint )FileFilterArray.length );
 
         foreach ( file_filter; FileFilterArray )
@@ -814,7 +944,7 @@ class SNAPSHOT
             stream.WriteText( file_filter );
         }
 
-        stream.WriteSection( "FILI" );
+        stream.WriteSection( "FileFilterIsInclusiveArray" );
         stream.WriteNatural32( cast( uint )FileFilterIsInclusiveArray.length );
 
         foreach ( file_filter_is_inclusive; FileFilterIsInclusiveArray )
@@ -822,7 +952,7 @@ class SNAPSHOT
             stream.WriteBoolean( file_filter_is_inclusive );
         }
 
-        stream.WriteSection( "SFIF" );
+        stream.WriteSection( "SelectedFileFilterArray" );
         stream.WriteNatural32( cast( uint )SelectedFileFilterArray.length );
 
         foreach ( selected_file_filter; SelectedFileFilterArray )
@@ -830,7 +960,7 @@ class SNAPSHOT
             stream.WriteText( selected_file_filter );
         }
 
-        stream.WriteSection( "FOLD" );
+        stream.WriteSection( "FolderArray" );
         stream.WriteNatural32( cast( uint )FolderArray.length );
 
         foreach ( snapshot_folder; FolderArray )
@@ -838,7 +968,7 @@ class SNAPSHOT
             snapshot_folder.Write( stream );
         }
 
-        stream.WriteSection( "FILE" );
+        stream.WriteSection( "FileArray" );
         stream.WriteNatural32( cast( uint )FileArray.length );
 
         foreach ( snapshot_file; FileArray )
@@ -885,22 +1015,22 @@ class SNAPSHOT
         stream = new STREAM();
         stream.LoadFile( file_path );
 
-        if ( stream.ReadSection( "DUBS" ) )
+        if ( stream.ReadSection( "Version" ) )
         {
             Version = stream.ReadNatural32();
         }
 
-        if ( stream.ReadSection( "TIME" ) )
+        if ( stream.ReadSection( "Time" ) )
         {
             Time = stream.ReadNatural64();
         }
 
-        if ( stream.ReadSection( "DATA" ) )
+        if ( stream.ReadSection( "DataFolderPath" ) )
         {
             DataFolderPath = stream.ReadText();
         }
 
-        if ( stream.ReadSection( "FOLF" ) )
+        if ( stream.ReadSection( "FolderFilterArray" ) )
         {
             folder_filter_count = stream.ReadNatural32();
 
@@ -912,7 +1042,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "FOLI" ) )
+        if ( stream.ReadSection( "FolderFilterIsInclusiveArray" ) )
         {
             folder_filter_is_inclusive_count = stream.ReadNatural32();
 
@@ -924,7 +1054,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "FILF" ) )
+        if ( stream.ReadSection( "FileFilterArray" ) )
         {
             file_filter_count = stream.ReadNatural32();
 
@@ -936,7 +1066,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "FILI" ) )
+        if ( stream.ReadSection( "FileFilterIsInclusiveArray" ) )
         {
             file_filter_is_inclusive_count = stream.ReadNatural32();
 
@@ -948,7 +1078,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "SFIF" ) )
+        if ( stream.ReadSection( "SelectedFileFilterArray" ) )
         {
             selected_file_filter_count = stream.ReadNatural32();
 
@@ -960,7 +1090,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "FOLD" ) )
+        if ( stream.ReadSection( "FolderArray" ) )
         {
             folder_count = stream.ReadNatural32();
 
@@ -985,7 +1115,7 @@ class SNAPSHOT
             }
         }
 
-        if ( stream.ReadSection( "FILE" ) )
+        if ( stream.ReadSection( "FileArray" ) )
         {
             file_count = stream.ReadNatural32();
 
@@ -1433,13 +1563,13 @@ class STORE
                 archive_snapshot_file = null;
             }
 
-            if ( archive_snapshot_file is null )
+            if ( archive_snapshot_file !is null )
             {
-                BackupFile( data_snapshot_file );
+                data_snapshot_file.Hash = archive_snapshot_file.Hash;
             }
             else
             {
-                data_snapshot_file.Hash = archive_snapshot_file.Hash;
+                BackupFile( data_snapshot_file );
             }
         }
     }

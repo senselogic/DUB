@@ -107,7 +107,7 @@ List the snapshots of the default archive of this repository.
 
 ## Version
 
-0.1
+0.2
 
 ## Author
 
