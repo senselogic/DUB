@@ -523,7 +523,10 @@ class SNAPSHOT_FILE
     string GetStoreName(
         )
     {
-        return cast( string )Hash.toHexString() ~ "_" ~ format( "%x", ByteCount ).toUpper();
+        return
+            ( "0000000000000000000000000000000000000000000000000000000000000000" ~ cast( string )Hash.toHexString() )[ $ - 64 .. $ ]
+            ~ "_"
+            ~ format( "%x", ByteCount ).toUpper();
     }
 
     // ~~
