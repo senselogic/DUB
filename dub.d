@@ -37,6 +37,8 @@ import std.string : endsWith, indexOf, join, lastIndexOf, replace, split, starts
 
 const uint
     NoFolderIndex = -1;
+const string[]
+    HexadecimalDigitArray = [ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F" ];
 
 // -- TYPES
 
@@ -521,7 +523,7 @@ class SNAPSHOT_FILE
     string GetStoreName(
         )
     {
-        return cast( string )Hash.toHexString() ~ format( "%x", ByteCount );
+        return cast( string )Hash.toHexString() ~ "_" ~ format( "%x", ByteCount ).toUpper();
     }
 
     // ~~
@@ -537,17 +539,21 @@ class SNAPSHOT_FILE
     string GetStoreFilePath(
         )
     {
-        string
-            store_file_name;
+        ulong
+            first_hash,
+            second_hash;
 
-        store_file_name = GetStoreFileName();
+        first_hash = Hash[ 0 ] >> 2;
+        second_hash = ( ( Hash[ 0 ] << 4 ) & 255 ) | ( Hash[ 1 ] >> 4 );
 
         return
-            store_file_name[ 0 .. 2 ]
+            HexadecimalDigitArray[ first_hash >> 4 ]
+            ~ HexadecimalDigitArray[ first_hash & 15 ]
             ~ "/"
-            ~ store_file_name[ 2 .. 4 ]
+            ~ HexadecimalDigitArray[ second_hash >> 4 ]
+            ~ HexadecimalDigitArray[ second_hash & 15 ]
             ~ "/"
-            ~ store_file_name;
+            ~ GetStoreFileName();
     }
 
     // ~~
@@ -887,7 +893,7 @@ class SNAPSHOT
             }
             else
             {
-                DataFolderPath.AddFolder();
+                DataFolderPath.AddFolder( true );
             }
         }
 
@@ -1158,7 +1164,7 @@ class ARCHIVE
 
         if ( !FolderPath.exists() )
         {
-            FolderPath.AddFolder();
+            FolderPath.AddFolder( true );
         }
     }
 
@@ -1290,7 +1296,7 @@ class HISTORY
         {
             if ( BackupOptionIsEnabled )
             {
-                FolderPath.AddFolder();
+                FolderPath.AddFolder( true );
             }
             else
             {
@@ -1304,7 +1310,7 @@ class HISTORY
         {
             if ( BackupOptionIsEnabled )
             {
-                archive_folder_path.AddFolder();
+                archive_folder_path.AddFolder( true );
             }
             else
             {
@@ -1407,7 +1413,7 @@ class STORE
         {
             if ( BackupOptionIsEnabled )
             {
-                FolderPath.AddFolder();
+                FolderPath.AddFolder( true );
             }
             else
             {
@@ -1438,9 +1444,9 @@ class STORE
 
         file_name = file_path.GetFileName().split( '.' )[ 0 ];
 
-        if ( file_name.length > 64 )
+        if ( file_name.length > 65 )
         {
-            hexadecimal_byte_count = file_name[ 64 .. $ ];
+            hexadecimal_byte_count = file_name[ 65 .. $ ];
 
             return parse!long( hexadecimal_byte_count, 16 ) == byte_count;
         }
@@ -1491,7 +1497,7 @@ class STORE
         {
             writeln( "Creating store folder : ", FolderPath );
 
-            FolderPath.AddFolder();
+            FolderPath.AddFolder( true );
         }
     }
 
@@ -1507,7 +1513,7 @@ class STORE
             store_folder_path;
 
         data_file_path = DataFolderPath ~ data_snapshot_file.GetFilePath();
-        data_snapshot_file.Hash = data_file_path.GetFileHash();
+        data_snapshot_file.Hash = data_file_path.GetFileHash( VerboseOptionIsEnabled );
         store_file_path = data_snapshot_file.GetStoreFilePath();
 
         writeln( "Backuping data file : ", data_file_path );
@@ -1641,7 +1647,7 @@ class STORE
 
         if ( data_folder_path.IsEmptyFolder() )
         {
-            data_folder_path.RemoveFolder();
+            data_folder_path.RemoveFolder( true );
         }
     }
 
@@ -1655,7 +1661,7 @@ class STORE
             data_file_path;
 
         data_file_path = DataFolderPath ~ data_snapshot_file.Folder.Path ~ data_snapshot_file.Name;
-        data_file_path.RemoveFile();
+        data_file_path.RemoveFile( true );
     }
 
     // ~~
@@ -1698,12 +1704,12 @@ class STORE
 
         data_folder_path = data_file_path.GetFolderPath();
 
-        writeln( "Restoring data file : ", data_file_path );
-
         if ( !data_folder_path.exists() )
         {
-            data_folder_path.AddFolder();
+            data_folder_path.AddFolder( true );
         }
+
+        writeln( "Restoring data file : ", data_file_path );
 
         try
         {
@@ -1793,7 +1799,7 @@ class REPOSITORY
         {
             if ( BackupOptionIsEnabled )
             {
-                FolderPath.AddFolder();
+                FolderPath.AddFolder( true );
             }
             else
             {
@@ -2395,10 +2401,14 @@ bool IsEmptyFolder(
 // ~~
 
 void AddFolder(
-    string folder_path
+    string folder_path,
+    bool it_is_verbose = false
     )
 {
-    writeln( "Adding folder : ", folder_path );
+    if ( it_is_verbose )
+    {
+        writeln( "Adding folder : ", folder_path );
+    }
 
     try
     {
@@ -2418,10 +2428,14 @@ void AddFolder(
 // ~~
 
 void RemoveFolder(
-    string folder_path
+    string folder_path,
+    bool it_is_verbose = false
     )
 {
-    writeln( "Removing folder : ", folder_path );
+    if ( it_is_verbose )
+    {
+        writeln( "Removing folder : ", folder_path );
+    }
 
     try
     {
@@ -2437,13 +2451,14 @@ void RemoveFolder(
 // ~~
 
 ubyte[] ReadByteArray(
-    string file_path
+    string file_path,
+    bool it_is_verbose = false
     )
 {
     ubyte[]
         file_byte_array;
 
-    if ( VerboseOptionIsEnabled )
+    if ( it_is_verbose )
     {
         writeln( "Reading file : ", file_path );
     }
@@ -2464,10 +2479,11 @@ ubyte[] ReadByteArray(
 
 void WriteByteArray(
     string file_path,
-    ubyte[] file_byte_array
+    ubyte[] file_byte_array,
+    bool it_is_verbose = false
     )
 {
-    if ( VerboseOptionIsEnabled )
+    if ( it_is_verbose )
     {
         writeln( "Writing file : ", file_path );
     }
@@ -2485,13 +2501,14 @@ void WriteByteArray(
 // ~~
 
 string ReadText(
-    string file_path
+    string file_path,
+    bool it_is_verbose = false
     )
 {
     string
         file_text;
 
-    if ( VerboseOptionIsEnabled )
+    if ( it_is_verbose )
     {
         writeln( "Reading file : ", file_path );
     }
@@ -2512,10 +2529,11 @@ string ReadText(
 
 void WriteText(
     string file_path,
-    string file_text
+    string file_text,
+    bool it_is_verbose = false
     )
 {
-    if ( VerboseOptionIsEnabled )
+    if ( it_is_verbose )
     {
         writeln( "Writing file : ", file_path );
     }
@@ -2533,10 +2551,14 @@ void WriteText(
 // ~~
 
 void RemoveFile(
-    string file_path
+    string file_path,
+    bool it_is_verbose = false
     )
 {
-    writeln( "Removing file : ", file_path );
+    if ( it_is_verbose )
+    {
+        writeln( "Removing file : ", file_path );
+    }
 
     try
     {
@@ -2551,7 +2573,8 @@ void RemoveFile(
 // ~~
 
 HASH GetFileHash(
-    string file_path
+    string file_path,
+    bool it_is_verbose = false
     )
 {
     File
@@ -2561,7 +2584,7 @@ HASH GetFileHash(
     SHA256
         sha256;
 
-    if ( VerboseOptionIsEnabled )
+    if ( it_is_verbose )
     {
         writeln( "Hashing file : ", file_path );
     }
@@ -2609,7 +2632,17 @@ string GetTimeStamp(
     ulong time
     )
 {
-    return ( time.GetTime().toISOString().replace( "T", "" ).replace( "Z", "" ).replace( ".", "" ) ~ "0000000" )[ 0 .. 21 ];
+    string
+        time_stamp;
+
+    time_stamp = ( time.GetTime().toISOString().replace( "T", "" ).replace( "Z", "" ).replace( ".", "" ) ~ "0000000" )[ 0 .. 21 ];
+
+    return
+        time_stamp[ 0 .. 8 ]
+        ~ "_"
+        ~ time_stamp[ 8 .. 14 ]
+        ~ "_"
+        ~ time_stamp[ 14 .. $ ];
 }
 
 // ~~
