@@ -27,7 +27,7 @@ import std.conv : parse, to;
 import std.datetime : hnsecs, Clock, SysTime, UTC;
 import std.digest : toHexString;
 import std.digest.sha : SHA256;
-import std.file : copy, dirEntries, exists, getAttributes, getTimes, mkdir, mkdirRecurse, read, readText, remove, rename, rmdir, setAttributes, setTimes, write, PreserveAttributes, SpanMode;
+import std.file : copy, dirEntries, exists, getAttributes, getSize, getTimes, mkdir, mkdirRecurse, read, readText, remove, rename, rmdir, setAttributes, setTimes, write, PreserveAttributes, SpanMode;
 import std.format : format;
 import std.path : globMatch;
 import std.stdio : readln, writeln, File;
@@ -571,6 +571,47 @@ class SNAPSHOT_FILE
     }
 
     // -- OPERATIONS
+
+    void HashDataFile(
+        string data_file_path
+        )
+    {
+        File
+            file;
+        SysTime
+            access_time,
+            modification_time;
+        HASH
+            hash;
+        SHA256
+            sha256;
+
+        if ( VerboseOptionIsEnabled )
+        {
+            writeln( "Hashing data file : ", data_file_path );
+        }
+
+        try
+        {
+            file = File( data_file_path );
+
+            foreach ( byte_array; file.byChunk( 32 * 1024 * 1024 ) )
+            {
+                sha256.put( byte_array );
+            }
+
+            Hash = sha256.finish();
+            ByteCount = data_file_path.getSize();
+            data_file_path.getTimes( access_time, modification_time );
+            AccessTime = access_time.GetTime(),
+            ModificationTime = modification_time.GetTime();
+            AttributeMask = data_file_path.getAttributes();
+        }
+        catch ( Exception exception )
+        {
+            Abort( "Can't hash data file : " ~ data_file_path, exception, false );
+        }
+    }
 
     void Write(
         STREAM stream
@@ -1506,7 +1547,7 @@ class STORE
 
     // ~~
 
-    void BackupFile(
+    void BackupDataFile(
         SNAPSHOT_FILE data_snapshot_file
         )
     {
@@ -1514,9 +1555,14 @@ class STORE
             data_file_path,
             store_file_path,
             store_folder_path;
+        uint
+            attribute_mask;
+        SysTime
+            access_time,
+            modification_time;
 
         data_file_path = DataFolderPath ~ data_snapshot_file.GetFilePath();
-        data_snapshot_file.Hash = data_file_path.GetFileHash( VerboseOptionIsEnabled );
+        data_snapshot_file.HashDataFile( data_file_path );
         store_file_path = data_snapshot_file.GetStoreFilePath();
 
         writeln( "Backuping data file : ", data_file_path );
@@ -1574,7 +1620,7 @@ class STORE
             }
             else
             {
-                BackupFile( data_snapshot_file );
+                BackupDataFile( data_snapshot_file );
             }
         }
     }
@@ -2571,44 +2617,6 @@ void RemoveFile(
     {
         Abort( "Can't remove file : " ~ file_path, exception );
     }
-}
-
-// ~~
-
-HASH GetFileHash(
-    string file_path,
-    bool it_is_verbose = false
-    )
-{
-    File
-        file;
-    HASH
-        hash;
-    SHA256
-        sha256;
-
-    if ( it_is_verbose )
-    {
-        writeln( "Hashing file : ", file_path );
-    }
-
-    try
-    {
-        file = File( file_path );
-
-        foreach ( byte_array; file.byChunk( 32 * 1024 * 1024 ) )
-        {
-            sha256.put( byte_array );
-        }
-
-        hash = sha256.finish();
-    }
-    catch ( Exception exception )
-    {
-        Abort( "Can't hash file : " ~ file_path, exception );
-    }
-
-    return hash;
 }
 
 // ~~
