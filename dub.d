@@ -420,8 +420,6 @@ class STREAM : BUFFER
         string tag
         )
     {
-        string
-            found_tag;
         ulong
             section_byte_count;
 
