@@ -2,7 +2,7 @@
 
 # Dub
 
-Deduplicated backup tool.
+Fast local deduplicated backup.
 
 ## Installation
 
