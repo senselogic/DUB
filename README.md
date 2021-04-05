@@ -103,7 +103,8 @@ List the snapshots of the default archive of this repository.
 
 * Symbolic links are not processed.
 * Only local repositories are handled.
-* Files are stored uncompressed and unencrypted, to allow external access.
+* Files are stored uncompressed and unencrypted, to allow external processing.
+* Backup operations are not transactional.
 
 ## Version
 
