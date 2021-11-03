@@ -2494,7 +2494,6 @@ void RemoveFolder(
     }
 }
 
-
 // ~~
 
 ubyte[] ReadByteArray(
